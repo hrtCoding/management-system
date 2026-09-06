@@ -1,0 +1,2295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ma Genarel Store — Grocery Ledger & Daily Accounts</title>
+
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts: Inter -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<!-- FontAwesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+<!-- jsPDF (for customer list PDF export) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<!-- Firebase v9 SDK (compat/CDN) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<style>
+  * { font-family: 'Inter', sans-serif; }
+  body { background: #FAFAF9; color: #1C1917; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #F5F5F4; }
+  ::-webkit-scrollbar-thumb { background: #A8A29E; border-radius: 3px; }
+
+  /* Sidebar */
+  #sidebar {
+    background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
+    transition: transform 0.3s ease;
+    z-index: 40;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-radius: 10px;
+    color: #94A3B8; cursor: pointer; font-size: 14px; font-weight: 500;
+    transition: all 0.2s ease; margin-bottom: 4px;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.08); color: #F1F5F9; }
+  .nav-item.active { background: linear-gradient(135deg, #10B981, #059669); color: white; box-shadow: 0 4px 15px rgba(16,185,129,0.35); }
+  .nav-item i { width: 18px; text-align: center; }
+
+  /* KPI Cards */
+  .kpi-card {
+    background: white; border-radius: 16px;
+    border: 1px solid #E7E5E4;
+    padding: 20px; position: relative; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+  .kpi-card::after {
+    content: ''; position: absolute; top: -20px; right: -20px;
+    width: 80px; height: 80px; border-radius: 50%; opacity: 0.08;
+  }
+  .kpi-due::after { background: #F59E0B; }
+  .kpi-collected::after { background: #10B981; }
+  .kpi-sales::after { background: #3B82F6; }
+  .kpi-expense::after { background: #F43F5E; }
+
+  /* Table rows ledger style */
+  .ledger-row {
+    border-bottom: 1px dashed #E7E5E4;
+    transition: background 0.15s;
+  }
+  .ledger-row:hover { background: #F5F5F4; }
+
+  /* Modal */
+  #modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 50; display: none;
+    align-items: center; justify-content: center; padding: 16px;
+  }
+  #modal-overlay.open { display: flex; }
+  #modal-box {
+    background: white; border-radius: 20px;
+    width: 100%; max-width: 680px; max-height: 90vh;
+    overflow-y: auto; position: relative;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.25);
+  }
+
+  /* Progress bar */
+  .progress-track { background: #E7E5E4; border-radius: 99px; height: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #10B981, #059669); transition: width 0.6s ease; }
+
+  /* Tabs */
+  .tab-btn {
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; color: #78716C;
+  }
+  .tab-btn.active { background: #10B981; color: white; box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
+
+  /* Form inputs */
+  .form-input {
+    width: 100%; border: 1.5px solid #E7E5E4; border-radius: 10px;
+    padding: 10px 14px; font-size: 14px; background: #FAFAF9;
+    outline: none; transition: border-color 0.2s, box-shadow 0.2s; color: #1C1917;
+  }
+  .form-input:focus { border-color: #10B981; box-shadow: 0 0 0 3px rgba(16,185,129,0.12); background: white; }
+
+  /* Buttons */
+  .btn-primary {
+    background: linear-gradient(135deg, #10B981, #059669);
+    color: white; border: none; border-radius: 10px;
+    padding: 10px 20px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(16,185,129,0.3);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,185,129,0.4); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .btn-danger {
+    background: linear-gradient(135deg, #F43F5E, #E11D48);
+    color: white; border: none; border-radius: 10px;
+    padding: 10px 20px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(244,63,94,0.3);
+  }
+  .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(244,63,94,0.4); }
+  .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .btn-amber {
+    background: linear-gradient(135deg, #F59E0B, #D97706);
+    color: white; border: none; border-radius: 10px;
+    padding: 10px 20px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(245,158,11,0.3);
+  }
+  .btn-amber:hover { transform: translateY(-1px); }
+  .btn-amber:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  /* Toast */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    padding: 12px 18px; border-radius: 12px; font-size: 14px; font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    animation: slideInRight 0.3s ease, fadeOut 0.4s ease 2.6s forwards;
+    display: flex; align-items: center; gap: 10px; max-width: 320px;
+  }
+  .toast.success { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+  .toast.error { background: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3; }
+  .toast.info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
+
+  @keyframes slideInRight { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(30px); } }
+
+  /* Spinner */
+  .spinner { width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Section headings */
+  .section-title { font-size: 22px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
+  .section-sub { font-size: 13px; color: #78716C; margin-top: 2px; }
+
+  /* Badges */
+  .badge { padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+  .badge-due { background: #FEF3C7; color: #92400E; }
+  .badge-payment { background: #D1FAE5; color: #065F46; }
+  .badge-sale { background: #DBEAFE; color: #1E40AF; }
+  .badge-expense { background: #FFE4E6; color: #9F1239; }
+
+  /* Mobile overlay for sidebar */
+  #sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 30; display: none; }
+  #sidebar-overlay.open { display: block; }
+
+  /* Card section */
+  .card { background: white; border-radius: 16px; border: 1px solid #E7E5E4; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+  /* Skeleton loader */
+  .skeleton { background: linear-gradient(90deg, #F5F5F4 25%, #E7E5E4 50%, #F5F5F4 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+  /* Amount number style */
+  .amount-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+  /* Mobile sidebar hidden by default */
+  @media (max-width: 1023px) {
+    #sidebar { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); }
+    #sidebar.open { transform: translateX(0); }
+  }
+
+  /* Search highlight */
+  .highlight { background: #FEF3C7; border-radius: 2px; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 48px 24px; color: #A8A29E; }
+  .empty-state i { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-state p { font-size: 14px; }
+
+  /* Chart container */
+  #weeklyChart { max-height: 260px; }
+</style>
+
+<script>
+  // ─────────────────────────────────────────────
+  //  TAILWIND CONFIG
+  // ─────────────────────────────────────────────
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          emerald: { 50:'#ECFDF5',100:'#D1FAE5',500:'#10B981',600:'#059669',700:'#047857' },
+        }
+      }
+    }
+  };
+</script>
+</head>
+
+<body class="min-h-screen bg-stone-50">
+
+<!-- ══════════════════════════════════════════
+     LOGIN & REGISTRATION CONTAINER
+══════════════════════════════════════════════ -->
+<div id="auth-container" class="min-h-screen w-full flex items-center justify-center bg-stone-100 p-4">
+  <div class="bg-white rounded-2xl border border-stone-200 shadow-xl w-full max-w-md p-8 relative overflow-hidden">
+    <!-- Brand/Logo -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg mb-3">
+        <i class="fas fa-book-open text-white text-lg"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-stone-800">Ma Genarel Store</h2>
+      <p class="text-stone-400 text-sm">Created by admin</p>
+    </div>
+
+    <!-- Login Section -->
+    <div id="login-section">
+      <h3 class="text-lg font-bold text-stone-700 mb-4">Login to your account</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold text-stone-600 mb-1 block">Username</label>
+          <input class="form-input" id="login-username" type="text" placeholder="Enter username (e.g. admin)" onkeyup="if(event.key === 'Enter') handleLogin()" />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-stone-600 mb-1 block">Password</label>
+          <input class="form-input" id="login-password" type="password" placeholder="••••" onkeyup="if(event.key === 'Enter') handleLogin()" />
+        </div>
+        <button class="btn-primary w-full py-3 mt-2" onclick="handleLogin()">
+          <i class="fas fa-sign-in-alt mr-2"></i>Login
+        </button>
+      </div>
+      <div class="mt-6 text-center text-xs text-stone-500">
+        Don't have an account? 
+        <button class="text-emerald-600 hover:underline font-semibold" onclick="toggleAuthMode('register')">Register here</button>
+      </div>
+      <!-- Hint -->
+      <div class="mt-4 bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-600">
+        <span class="font-semibold text-stone-700">Default Access:</span><br>
+        Name: <code class="bg-stone-200 px-1 rounded font-mono">admin</code> | Pass: <code class="bg-stone-200 px-1 rounded font-mono">****</code>
+      </div>
+    </div>
+
+    <!-- Register Section -->
+    <div id="register-section" class="hidden" style="display:none">
+      <h3 class="text-lg font-bold text-stone-700 mb-4">Create an account</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold text-stone-600 mb-1 block">Your Name</label>
+          <input class="form-input" id="reg-username" type="text" placeholder="e.g. admin" onkeyup="if(event.key === 'Enter') handleRegister()" />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-stone-600 mb-1 block">Password</label>
+          <input class="form-input" id="reg-password" type="password" placeholder="Create a password" onkeyup="if(event.key === 'Enter') handleRegister()" />
+        </div>
+        <button class="btn-primary w-full py-3 mt-2" onclick="handleRegister()">
+          <i class="fas fa-user-plus mr-2"></i>Register
+        </button>
+      </div>
+      <div class="mt-6 text-center text-xs text-stone-500">
+        Already have an account? 
+        <button class="text-emerald-600 hover:underline font-semibold" onclick="toggleAuthMode('login')">Login here</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     APP CONTAINER (MAIN WEB APP)
+══════════════════════════════════════════════ -->
+<div id="app-container" class="min-h-screen w-full flex hidden">
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR OVERLAY (mobile)
+  ══════════════════════════════════════════════ -->
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════════ -->
+  <aside id="sidebar" class="w-64 flex-shrink-0 flex flex-col h-screen sticky top-0">
+    <!-- Logo -->
+    <div class="p-6 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg">
+          <i class="fas fa-book-open text-white text-sm"></i>
+        </div>
+        <div>
+          <div class="text-white font-bold text-base leading-tight">Ma Genarel Store</div>
+          <div class="text-slate-400 text-xs">Created by admin</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 p-4 overflow-y-auto">
+      <div class="text-slate-500 text-xs font-semibold uppercase tracking-widest mb-3 px-2">Menu</div>
+      <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+        <i class="fas fa-chart-line"></i> Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('ledger')" id="nav-ledger">
+        <i class="fas fa-users"></i> Customer Ledger
+      </div>
+      <div class="nav-item" onclick="showPage('daily')" id="nav-daily">
+        <i class="fas fa-calendar-alt"></i> Daily Accounts
+      </div>
+      <div class="nav-item" onclick="showPage('history')" id="nav-history">
+        <i class="fas fa-archive"></i> All History
+      </div>
+      <div class="nav-item" onclick="showPage('users')" id="nav-users">
+        <i class="fas fa-user-cog"></i> Manage Users
+      </div>
+    </nav>
+
+    <!-- Footer & Logout -->
+    <div class="p-4 border-t border-white/10">
+      <div class="nav-item text-rose-400 hover:text-rose-300 mb-3" onclick="logout()">
+        <i class="fas fa-sign-out-alt"></i> Logout
+      </div>
+      <div class="text-slate-500 text-xs text-center">
+        <span id="current-date-display"></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════════════ -->
+  <main class="flex-1 flex flex-col min-h-screen overflow-x-hidden bg-[#FAFAF9]">
+
+    <!-- Top Bar -->
+    <header class="bg-white border-b border-stone-200 px-4 lg:px-8 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+      <div class="flex items-center gap-4">
+        <!-- Hamburger (mobile) -->
+        <button class="lg:hidden text-stone-600 hover:text-stone-900 p-1" onclick="toggleSidebar()">
+          <i class="fas fa-bars text-lg"></i>
+        </button>
+        <div>
+          <div class="font-bold text-stone-800 text-lg" id="page-title">Dashboard</div>
+          <div class="text-stone-400 text-xs" id="page-subtitle">Overview of your shop</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Firebase Status Indicator -->
+        <div class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full" id="firebase-status-badge">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span class="text-amber-700 font-medium hidden sm:inline">Connecting…</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Container -->
+    <div class="flex-1 p-4 lg:p-8">
+
+      <!-- ──────────────────────────────────────
+           PAGE: DASHBOARD
+      ─────────────────────────────────────────── -->
+      <div id="page-dashboard" class="page-section">
+
+        <!-- KPI Grid -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <!-- Total Due -->
+          <div class="kpi-card kpi-due col-span-2 sm:col-span-1">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-exclamation-circle text-amber-500"></i>
+              </div>
+              <span class="text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full">TOTAL</span>
+            </div>
+            <div class="text-2xl font-extrabold text-stone-800 amount-num" id="kpi-total-due">$—</div>
+            <div class="text-xs text-stone-500 mt-1 font-medium">Outstanding Due (Baki)</div>
+          </div>
+
+          <!-- Today Collected -->
+          <div class="kpi-card kpi-collected col-span-2 sm:col-span-1">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-hand-holding-usd text-emerald-500"></i>
+              </div>
+              <span class="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">30 DAYS</span>
+            </div>
+            <div class="text-2xl font-extrabold text-stone-800 amount-num" id="kpi-today-collected">$—</div>
+            <div class="text-xs text-stone-500 mt-1 font-medium">Collected Baki (Last 30 Days)</div>
+          </div>
+
+          <!-- Today Sales -->
+          <div class="kpi-card kpi-sales">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-shopping-cart text-blue-500"></i>
+              </div>
+              <span class="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">30 DAYS</span>
+            </div>
+            <div class="text-2xl font-extrabold text-stone-800 amount-num" id="kpi-today-sales">$—</div>
+            <div class="text-xs text-stone-500 mt-1 font-medium">Total Sales (Last 30 Days)</div>
+          </div>
+
+          <!-- Today Expenses -->
+          <div class="kpi-card kpi-expense">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-receipt text-rose-500"></i>
+              </div>
+              <span class="text-xs text-rose-600 font-semibold bg-rose-50 px-2 py-0.5 rounded-full">30 DAYS</span>
+            </div>
+            <div class="text-2xl font-extrabold text-stone-800 amount-num" id="kpi-today-expenses">$—</div>
+            <div class="text-xs text-stone-500 mt-1 font-medium">Total Expenses (Last 30 Days)</div>
+          </div>
+        </div>
+
+        <!-- Collection Rate -->
+        <div class="card p-6 mb-6">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <div class="font-bold text-stone-700 text-sm">Collection Rate</div>
+              <div class="text-xs text-stone-400">Last 30 days collected vs total outstanding</div>
+            </div>
+            <div class="text-lg font-extrabold text-emerald-600 amount-num" id="collection-rate-pct">0%</div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="collection-progress-fill" style="width:0%"></div>
+          </div>
+          <div class="flex justify-between mt-2 text-xs text-stone-400">
+            <span id="cr-collected">Collected: $0</span>
+            <span id="cr-total">Total Due: $0</span>
+          </div>
+        </div>
+
+        <!-- Weekly Chart -->
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="font-bold text-stone-700">Weekly Overview</div>
+              <div class="text-xs text-stone-400">Last 7 days — Sales vs Expenses</div>
+            </div>
+            <div class="flex gap-4 text-xs">
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-blue-400 inline-block"></span>Sales</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-rose-400 inline-block"></span>Expenses</span>
+            </div>
+          </div>
+          <canvas id="weeklyChart"></canvas>
+        </div>
+
+      </div><!-- /dashboard -->
+
+      <!-- ──────────────────────────────────────
+           PAGE: CUSTOMER LEDGER
+      ─────────────────────────────────────────── -->
+      <div id="page-ledger" class="page-section hidden">
+
+        <div class="grid lg:grid-cols-3 gap-6">
+
+          <!-- Add Customer Form -->
+          <div class="card p-6 lg:col-span-1 h-fit">
+            <div class="font-bold text-stone-700 mb-4 flex items-center gap-2">
+              <i class="fas fa-user-plus text-emerald-500"></i> Add New Customer
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="text-xs font-semibold text-stone-600 mb-1 block">Customer Name *</label>
+                <input class="form-input" id="new-cust-name" type="text" placeholder="e.g. Rahim Uddin" />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-stone-600 mb-1 block">Phone Number</label>
+                <input class="form-input" id="new-cust-phone" type="tel" placeholder="01XXXXXXXXX" />
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-stone-600 mb-1 block">Initial Due ($)</label>
+                <input class="form-input" id="new-cust-due" type="number" min="0" placeholder="0.00" />
+              </div>
+              <button class="btn-primary w-full mt-2" id="btn-add-customer" onclick="addCustomer()">
+                <i class="fas fa-plus mr-2"></i>Add Customer
+              </button>
+            </div>
+          </div>
+
+          <!-- Customer List -->
+          <div class="card p-6 lg:col-span-2">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="relative flex-1">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm"></i>
+                <input class="form-input pl-9" id="search-customers" type="text" placeholder="Search by name or phone…" oninput="filterCustomers()" />
+              </div>
+              <div class="text-xs text-stone-500 font-medium whitespace-nowrap" id="customer-count-label">— customers</div>
+              <button class="btn-primary whitespace-nowrap" style="padding:8px 14px;font-size:13px;" onclick="downloadCustomerListPDF()" title="Download all customers & their due as PDF">
+                <i class="fas fa-file-pdf mr-1.5"></i>PDF
+              </button>
+            </div>
+
+            <!-- List -->
+            <div id="customer-list" class="space-y-0">
+              <!-- skeleton placeholder -->
+              <div class="ledger-row py-3 px-1 flex items-center gap-3">
+                <div class="skeleton w-9 h-9 rounded-full"></div>
+                <div class="flex-1"><div class="skeleton h-3.5 w-32 mb-1.5 rounded"></div><div class="skeleton h-3 w-20 rounded"></div></div>
+                <div class="skeleton h-5 w-16 rounded-full"></div>
+              </div>
+            </div>
+
+            <div id="customer-empty" class="empty-state hidden">
+              <i class="fas fa-users"></i>
+              <p>No customers found.<br>Add your first customer above!</p>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /ledger -->
+
+      <!-- ──────────────────────────────────────
+           PAGE: DAILY ACCOUNTS
+      ─────────────────────────────────────────── -->
+      <div id="page-daily" class="page-section hidden">
+
+        <div class="grid lg:grid-cols-3 gap-6">
+
+          <!-- Forms Column -->
+          <div class="space-y-6 lg:col-span-1">
+
+            <!-- Add Sale -->
+            <div class="card p-6">
+              <div class="font-bold text-stone-700 mb-4 flex items-center gap-2">
+                <i class="fas fa-shopping-cart text-blue-500"></i> Log Daily Sale
+              </div>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs font-semibold text-stone-600 mb-1 block">Date *</label>
+                  <input class="form-input" id="sale-date" type="date" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-stone-600 mb-1 block">Sale Amount ($) *</label>
+                  <input class="form-input" id="sale-amount" type="number" min="0" placeholder="0.00" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-stone-600 mb-1 block">Note (optional)</label>
+                  <input class="form-input" id="sale-note" type="text" placeholder="e.g. Morning sales" />
+                </div>
+                <button class="btn-primary w-full" id="btn-add-sale" onclick="addDailySale()">
+                  <i class="fas fa-plus mr-2"></i>Log Sale
+                </button>
+              </div>
+            </div>
+
+            <!-- Add Expense -->
+            <div class="card p-6">
+              <div class="font-bold text-stone-700 mb-4 flex items-center gap-2">
+                <i class="fas fa-receipt text-rose-500"></i> Log Expense
+              </div>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs font-semibold text-stone-600 mb-1 block">Date *</label>
+                  <input class="form-input" id="expense-date" type="date" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-stone-600 mb-1 block">Amount ($) *</label>
+                  <input class="form-input" id="expense-amount" type="number" min="0" placeholder="0.00" />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-stone-600 mb-1 block">Purpose / Reason *</label>
+                  <input class="form-input" id="expense-reason" type="text" placeholder="e.g. Rent, Utilities…" />
+                </div>
+                <button class="btn-danger w-full" id="btn-add-expense" onclick="addDailyExpense()">
+                  <i class="fas fa-minus mr-2"></i>Log Expense
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Daily Records -->
+          <div class="card p-6 lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+              <div class="font-bold text-stone-700">Transaction Log</div>
+              <input class="form-input w-auto text-xs py-1.5 px-3" id="filter-daily-date" type="date" onchange="filterDailyByDate()" title="Filter by date" />
+            </div>
+
+            <div id="daily-list" class="space-y-0">
+              <div class="ledger-row py-3 flex items-center gap-3">
+                <div class="skeleton w-8 h-8 rounded-lg"></div>
+                <div class="flex-1"><div class="skeleton h-3.5 w-24 mb-1.5 rounded"></div><div class="skeleton h-3 w-16 rounded"></div></div>
+                <div class="skeleton h-5 w-14 rounded"></div>
+              </div>
+            </div>
+
+            <div id="daily-empty" class="empty-state hidden">
+              <i class="fas fa-calendar-times"></i>
+              <p>No records yet.<br>Log your first sale or expense!</p>
+            </div>
+
+            <!-- Daily Summary -->
+            <div class="mt-4 pt-4 border-t border-dashed border-stone-200 grid grid-cols-3 gap-3 text-center" id="daily-summary">
+              <div class="bg-blue-50 rounded-xl p-3">
+                <div class="text-xs text-blue-600 font-semibold mb-1">Total Sales</div>
+                <div class="font-bold text-blue-700 amount-num" id="sum-sales">$0</div>
+              </div>
+              <div class="bg-rose-50 rounded-xl p-3">
+                <div class="text-xs text-rose-600 font-semibold mb-1">Total Expenses</div>
+                <div class="font-bold text-rose-700 amount-num" id="sum-expenses">$0</div>
+              </div>
+              <div class="bg-emerald-50 rounded-xl p-3">
+                <div class="text-xs text-emerald-600 font-semibold mb-1">Net Profit</div>
+                <div class="font-bold text-emerald-700 amount-num" id="sum-net">$0</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /daily -->
+
+      <!-- ──────────────────────────────────────
+           PAGE: ALL HISTORY
+      ─────────────────────────────────────────── -->
+      <div id="page-history" class="page-section hidden">
+        <div class="card p-6">
+          <div class="flex gap-2 mb-5 bg-stone-100 p-1 rounded-xl w-fit">
+            <button class="tab-btn active" id="hist-tab-btn-daily" onclick="switchHistoryTab('daily')">
+              <i class="fas fa-calendar-alt mr-1.5"></i>Daily Sales &amp; Expenses
+            </button>
+            <button class="tab-btn" id="hist-tab-btn-customer" onclick="switchHistoryTab('customer')">
+              <i class="fas fa-users mr-1.5"></i>Customer Transactions
+            </button>
+          </div>
+
+          <!-- All Daily Records -->
+          <div id="hist-tab-daily">
+            <div id="history-daily-list" class="space-y-0 max-h-[600px] overflow-y-auto"></div>
+            <div id="history-daily-empty" class="empty-state hidden">
+              <i class="fas fa-calendar-times"></i>
+              <p>No records yet.</p>
+            </div>
+          </div>
+
+          <!-- All Customer Transactions (Due Added / Payments) -->
+          <div id="hist-tab-customer" class="hidden">
+            <div id="history-customer-list" class="space-y-0 max-h-[600px] overflow-y-auto"></div>
+            <div id="history-customer-empty" class="empty-state hidden">
+              <i class="fas fa-receipt"></i>
+              <p>No transactions yet.</p>
+            </div>
+          </div>
+        </div>
+      </div><!-- /history -->
+
+      <!-- ──────────────────────────────────────
+           PAGE: MANAGE USERS (ADMIN ACCESS CONTROLLED)
+      ─────────────────────────────────────────── -->
+      <div id="page-users" class="page-section hidden">
+        <!-- master gate verification form -->
+        <div id="users-auth-wrapper" class="card p-8 max-w-md mx-auto text-center">
+          <div class="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
+            <i class="fas fa-lock text-amber-500 text-lg"></i>
+          </div>
+          <h3 class="font-bold text-stone-800 text-lg mb-1">Owner Verification Required</h3>
+          <p class="text-xs text-stone-400 mb-6 font-medium">Please enter master admin details to manage accounts.</p>
+          
+          <div class="space-y-4 text-left">
+            <div>
+              <label class="text-xs font-semibold text-stone-600 mb-1 block">Master Username</label>
+              <input class="form-input" id="admin-auth-user" type="text" placeholder="e.g. admin" onkeyup="if(event.key === 'Enter') verifyAdmin()" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-stone-600 mb-1 block">Master Password</label>
+              <input class="form-input" id="admin-auth-pass" type="password" placeholder="••••••" onkeyup="if(event.key === 'Enter') verifyAdmin()" />
+            </div>
+            <button class="btn-primary w-full py-3 mt-2" onclick="verifyAdmin()">
+              <i class="fas fa-shield-alt mr-2"></i>Verify &amp; Enter
+            </button>
+          </div>
+        </div>
+
+        <!-- primary manager screen -->
+        <div id="users-content-wrapper" class="card p-6 max-w-2xl mx-auto hidden">
+          <div class="flex items-center justify-between mb-4 border-b pb-4 border-stone-100">
+            <div>
+              <div class="font-bold text-stone-700 flex items-center gap-2 text-lg">
+                <i class="fas fa-users-cog text-emerald-500"></i> Registered Shop Accounts
+              </div>
+              <p class="text-xs text-stone-500 mt-0.5">
+                Authorized panel to inspect registrations and clear inactive operators.
+              </p>
+            </div>
+            <button class="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-colors border border-stone-200" onclick="lockAdminPanel()">
+              <i class="fas fa-lock"></i> Lock Section
+            </button>
+          </div>
+          <div id="users-list" class="space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div><!-- /users -->
+
+    </div><!-- /page container -->
+  </main>
+
+  <!-- ══════════════════════════════════════════
+       CUSTOMER MODAL
+  ══════════════════════════════════════════════ -->
+  <div id="modal-overlay" onclick="closeModalOnOverlay(event)">
+    <div id="modal-box">
+
+      <!-- Modal Header -->
+      <div class="sticky top-0 bg-white border-b border-stone-200 px-6 py-4 rounded-t-2xl z-10">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-base shadow" id="modal-avatar">?</div>
+            <div>
+              <div class="font-bold text-stone-800" id="modal-cust-name">Customer</div>
+              <div class="text-xs text-stone-400" id="modal-cust-phone">—</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <div class="text-xs text-stone-400">Current Due</div>
+              <div class="font-extrabold text-lg text-amber-600 amount-num" id="modal-cust-due">$0</div>
+            </div>
+            <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-500 transition-colors">
+              <i class="fas fa-times text-sm"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6">
+
+        <!-- Action Tabs -->
+        <div class="flex gap-1.5 mb-5 bg-stone-100 p-1 rounded-xl overflow-x-auto">
+          <button class="tab-btn flex-1 active text-xs sm:text-sm" id="tab-btn-history" onclick="switchModalTab('history')">
+            <i class="fas fa-history mr-1"></i>History
+          </button>
+          <button class="tab-btn flex-1 text-xs sm:text-sm" id="tab-btn-add-due" onclick="switchModalTab('add-due')">
+            <i class="fas fa-plus-circle mr-1"></i>Add Due
+          </button>
+          <button class="tab-btn flex-1 text-xs sm:text-sm" id="tab-btn-payment" onclick="switchModalTab('payment')">
+            <i class="fas fa-check-circle mr-1"></i>Payment
+          </button>
+          <button class="tab-btn flex-1 text-xs sm:text-sm" id="tab-btn-edit" onclick="switchModalTab('edit')">
+            <i class="fas fa-edit mr-1"></i>Edit
+          </button>
+        </div>
+
+        <!-- Tab: Transaction History -->
+        <div id="modal-tab-history">
+          <div id="modal-tx-list" class="space-y-0 max-h-80 overflow-y-auto">
+            <div class="text-center py-8 text-stone-400 text-sm">
+              <div class="spinner mx-auto mb-2" style="border-color: #D1D5DB; border-top-color: #10B981;"></div>
+              Loading transactions…
+            </div>
+          </div>
+          <div id="modal-tx-empty" class="empty-state hidden">
+            <i class="fas fa-receipt"></i>
+            <p>No transactions yet for this customer.</p>
+          </div>
+
+          <!-- Delete Customer (danger zone) -->
+          <div class="mt-6 pt-4 border-t border-dashed border-stone-200">
+            <button class="text-xs text-rose-500 hover:text-rose-700 font-medium flex items-center gap-1.5 transition-colors" onclick="deleteCustomer()">
+              <i class="fas fa-trash-alt"></i> Delete Customer
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab: Add Due -->
+        <div id="modal-tab-add-due" class="hidden space-y-3">
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 mb-1">
+            <i class="fas fa-info-circle mr-1"></i> This will <strong>increase</strong> the customer's outstanding due.
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Date *</label>
+            <input class="form-input" id="due-tx-date" type="date" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Amount ($) *</label>
+            <input class="form-input" id="due-tx-amount" type="number" min="0" placeholder="0.00" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Description</label>
+            <input class="form-input" id="due-tx-desc" type="text" placeholder="e.g. Grocery purchase" />
+          </div>
+          <button class="btn-amber w-full mt-2" id="btn-add-due" onclick="addDueTransaction()">
+            <i class="fas fa-plus mr-2"></i>Add to Due (Baki)
+          </button>
+        </div>
+
+        <!-- Tab: Receive Payment -->
+        <div id="modal-tab-payment" class="hidden space-y-3">
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700 mb-1">
+            <i class="fas fa-info-circle mr-1"></i> This will <strong>reduce</strong> the customer's outstanding due.
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Date *</label>
+            <input class="form-input" id="pay-tx-date" type="date" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Amount Received ($) *</label>
+            <input class="form-input" id="pay-tx-amount" type="number" min="0" placeholder="0.00" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Note</label>
+            <input class="form-input" id="pay-tx-desc" type="text" placeholder="e.g. Cash payment" />
+          </div>
+          <button class="btn-primary w-full mt-2" id="btn-add-payment" onclick="addPaymentTransaction()">
+            <i class="fas fa-check mr-2"></i>Record Payment
+          </button>
+        </div>
+
+        <!-- Tab: Edit Info -->
+        <div id="modal-tab-edit" class="hidden space-y-3">
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 mb-1">
+            <i class="fas fa-info-circle mr-1"></i> You can change the customer's name and phone number below.
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Customer Name *</label>
+            <input class="form-input" id="edit-cust-name" type="text" placeholder="e.g. Rahim Uddin" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Phone Number</label>
+            <input class="form-input" id="edit-cust-phone" type="tel" placeholder="01XXXXXXXXX" />
+          </div>
+          <button class="btn-primary w-full mt-2" id="btn-edit-customer" onclick="updateCustomerDetails()">
+            <i class="fas fa-save mr-2"></i>Save Changes
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app-container -->
+
+<!-- ══════════════════════════════════════════
+     TOAST CONTAINER
+══════════════════════════════════════════════ -->
+<div id="toast-container"></div>
+
+<!-- ══════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════ -->
+<script src="js/firebase-config.js"></script>
+
+<script>
+// ═══════════════════════════════════════════
+//  FIREBASE CONFIGURATION
+// ═══════════════════════════════════════════
+// Firebase config is loaded from js/firebase-config.js
+const firebaseConfig = window.firebaseConfig;
+
+// ── Initialize Firebase App (v9 compat SDK) ──
+firebase.initializeApp(firebaseConfig);
+
+// ── Get Firestore instance ──
+const db = firebase.firestore();
+
+// ── Firestore Collection References ──
+const customersCol    = db.collection('customers');
+const transactionsCol = db.collection('transactions');
+const dailyRecordsCol = db.collection('daily_records');
+
+// ═══════════════════════════════════════════
+//  APP STATE
+// ═══════════════════════════════════════════
+let allCustomers   = [];  // local cache of customers
+let allDaily       = [];  // local cache of daily_records
+let currentCustomer = null; // currently open modal customer
+let isAdminVerified = false; // special master admin verification flag
+let currentCustomerTxList = []; // last-loaded transactions for the open customer modal (for edit/delete)
+
+// Firestore real-time listeners (to detach if needed)
+let unsubCustomers = null;
+let unsubTransactions = null;
+let unsubDaily = null;
+
+// Chart.js instance
+let weeklyChart = null;
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+
+/** Format number to currency string */
+function fmt(n) {
+  const num = parseFloat(n) || 0;
+  return '$' + num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+/** Check whether a YYYY-MM-DD date string falls within the last N days (inclusive of today) */
+function isWithinLastDays(dateStr, days) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr + 'T00:00:00');
+  const cutoff = new Date();
+  cutoff.setHours(0,0,0,0);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  return d >= cutoff;
+}
+
+/** Get today's date string YYYY-MM-DD */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/** Get initials from name */
+function initials(name) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+}
+
+/** Show toast notification */
+function toast(msg, type='success') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  const icons = { success:'fa-check-circle', error:'fa-times-circle', info:'fa-info-circle' };
+  t.className = `toast ${type}`;
+  t.innerHTML = `<i class="fas ${icons[type]}"></i> ${msg}`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+/** Set button loading state */
+function setBtnLoading(id, loading, originalHTML) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.dataset.original = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner"></span>`;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = originalHTML || btn.dataset.original || btn.innerHTML;
+  }
+}
+
+/** Update Firebase connection status badge */
+function setFirebaseStatus(connected) {
+  const badge = document.getElementById('firebase-status-badge');
+  if (connected) {
+    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span class="text-emerald-700 font-medium hidden sm:inline">Live</span>`;
+    badge.className = 'flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200';
+  } else {
+    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span><span class="text-red-700 font-medium hidden sm:inline">Offline</span>`;
+    badge.className = 'flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-red-50 border border-red-200';
+  }
+}
+
+// ─────────────────────────────────────────────
+//  LOGIN & REGISTRATION LOGIC
+// ─────────────────────────────────────────────
+
+function toggleAuthMode(mode) {
+  if (mode === 'login') {
+    document.getElementById('login-section').classList.remove('hidden');
+    document.getElementById('register-section').classList.add('hidden');
+  } else {
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('register-section').classList.remove('hidden');
+  }
+}
+
+/** Initialize user credentials database in localStorage */
+function initUserDatabase() {
+  let usersRaw = localStorage.getItem('baki_khata_users');
+  let users;
+
+  try {
+    users = usersRaw ? JSON.parse(usersRaw) : [];
+  } catch (e) {
+    users = [];
+  }
+
+  // Keep the master login fixed to the requested credentials.
+  const adminIndex = users.findIndex(u => String(u.username || '').toLowerCase() === 'admin');
+  if (adminIndex >= 0) {
+    users[adminIndex].username = 'admin';
+    users[adminIndex].password = '0000';
+  } else {
+    users.unshift({ username: 'admin', password: '0000' });
+  }
+
+  localStorage.setItem('baki_khata_users', JSON.stringify(users));
+  return users;
+}
+
+function handleLogin() {
+  const userField = document.getElementById('login-username').value.trim();
+  const passField = document.getElementById('login-password').value;
+
+  if (!userField || !passField) {
+    toast('Please fill in both fields', 'error');
+    return;
+  }
+
+  const users = initUserDatabase();
+  const matchedUser = users.find(u => u.username.toLowerCase() === userField.toLowerCase() && u.password === passField);
+
+  if (matchedUser) {
+    localStorage.setItem('baki_khata_logged_in_user', matchedUser.username);
+    toast(`Welcome back, ${matchedUser.username}!`);
+    showMainApp();
+  } else {
+    toast('Invalid username or password', 'error');
+  }
+}
+
+function handleRegister() {
+  const userField = document.getElementById('reg-username').value.trim();
+  const passField = document.getElementById('reg-password').value;
+
+  if (!userField || !passField) {
+    toast('Please fill in all fields', 'error');
+    return;
+  }
+
+  const users = initUserDatabase();
+  const exists = users.some(u => u.username.toLowerCase() === userField.toLowerCase());
+
+  if (exists) {
+    toast('Username already exists', 'error');
+    return;
+  }
+
+  users.push({ username: userField, password: passField });
+  localStorage.setItem('baki_khata_users', JSON.stringify(users));
+
+  toast('Account created successfully! You can now log in.');
+  toggleAuthMode('login');
+  document.getElementById('login-username').value = userField;
+  document.getElementById('login-password').value = '';
+}
+
+function showMainApp() {
+  document.getElementById('auth-container').classList.add('hidden');
+  document.getElementById('app-container').classList.remove('hidden');
+  startApp();
+}
+
+function logout() {
+  localStorage.removeItem('baki_khata_logged_in_user');
+  sessionStorage.removeItem('baki_khata_admin_verified');
+  location.reload(); // Reload the page to securely teardown active Firestore observers and state
+}
+
+// ─────────────────────────────────────────────
+//  MASTER ADMIN PANEL SECURITY
+// ─────────────────────────────────────────────
+
+function verifyAdmin() {
+  const userField = document.getElementById('admin-auth-user').value.trim();
+  const passField = document.getElementById('admin-auth-pass').value;
+
+  if (userField.toLowerCase() === 'admin' && passField === '0000') {
+    isAdminVerified = true;
+    sessionStorage.setItem('baki_khata_admin_verified', 'true');
+    document.getElementById('users-auth-wrapper').classList.add('hidden');
+    document.getElementById('users-content-wrapper').classList.remove('hidden');
+    renderUsersList();
+    toast('Admin access granted!', 'success');
+  } else {
+    toast('Incorrect master username or password!', 'error');
+  }
+}
+
+function lockAdminPanel() {
+  // Simply return to the dashboard — no separate admin login form anymore.
+  showPage('dashboard');
+}
+
+function renderUsersList() {
+  const listEl = document.getElementById('users-list');
+  if (!listEl) return;
+
+  const users = initUserDatabase();
+  const loggedInUser = localStorage.getItem('baki_khata_logged_in_user') || '';
+
+  if (users.length === 0) {
+    listEl.innerHTML = `<div class="text-center py-6 text-stone-400 text-sm">No registered operators found.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = users.map(u => {
+    const isSelf = u.username.toLowerCase() === loggedInUser.toLowerCase();
+    const isDefaultAdmin = u.username.toLowerCase() === 'admin';
+    const canDelete = !isSelf && !isDefaultAdmin;
+
+    return `
+      <div class="flex items-center justify-between p-3.5 bg-stone-50 rounded-xl border border-stone-200">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 bg-stone-200 rounded-full flex items-center justify-center text-stone-600 font-bold text-sm">
+            ${initials(u.username)}
+          </div>
+          <div>
+            <div class="font-semibold text-stone-800 text-sm flex items-center gap-1.5">
+              ${u.username}
+              ${isSelf ? '<span class="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium border border-emerald-200">Active</span>' : ''}
+              ${isDefaultAdmin ? '<span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full font-medium border border-blue-200">Master</span>' : ''}
+            </div>
+            <div class="text-[11px] text-stone-400 flex items-center gap-1 mt-0.5">
+              <i class="fas fa-key text-[10px]"></i> Key: <span class="font-mono bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded select-all font-bold">${u.password}</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          ${canDelete ? `
+            <button onclick="deleteUser('${u.username}')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1.5 rounded-lg font-medium transition-colors border border-rose-200 flex items-center gap-1">
+              <i class="fas fa-trash-alt text-[10px]"></i> Delete
+            </button>
+          ` : `
+            <span class="text-xs text-stone-400 italic px-2 font-medium">Locked</span>
+          `}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function deleteUser(username) {
+  if (!confirm(`Are you sure you want to permanently delete user "${username}"? They will lose application login rights.`)) return;
+
+  let users = initUserDatabase();
+  users = users.filter(u => u.username.toLowerCase() !== username.toLowerCase());
+  localStorage.setItem('baki_khata_users', JSON.stringify(users));
+  
+  toast(`User "${username}" successfully deleted.`, 'info');
+  renderUsersList();
+}
+
+// ─────────────────────────────────────────────
+//  SIDEBAR / NAVIGATION
+// ─────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+const pageTitles = {
+  dashboard: ['Dashboard', 'Overview of your shop'],
+  ledger:    ['Customer Ledger', 'Manage Baki & customer accounts'],
+  daily:     ['Daily Accounts', 'Log sales and expenses'],
+  history:   ['All History', 'Complete, unfiltered record of everything'],
+  users:     ['Manage Users', 'Master panel to control application operators']
+};
+
+function showPage(page) {
+  // Hide all pages
+  document.querySelectorAll('.page-section').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+  // Show target
+  document.getElementById(`page-${page}`).classList.remove('hidden');
+  document.getElementById(`nav-${page}`).classList.add('active');
+
+  // Update header
+  const [title, sub] = pageTitles[page];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-subtitle').textContent = sub;
+
+  // Users management page: already logged in via the main login, so no second
+  // login/verification form is shown here anymore — go straight to the content.
+  if (page === 'users') {
+    document.getElementById('users-auth-wrapper').classList.add('hidden');
+    document.getElementById('users-content-wrapper').classList.remove('hidden');
+    renderUsersList();
+  }
+
+  closeSidebar();
+}
+
+// ─────────────────────────────────────────────
+//  DATE DISPLAY
+// ─────────────────────────────────────────────
+function updateDateDisplay() {
+  const d = new Date();
+  const options = { weekday:'short', year:'numeric', month:'short', day:'numeric' };
+  document.getElementById('current-date-display').textContent = d.toLocaleDateString('en-US', options);
+}
+
+// ─────────────────────────────────────────────
+//  SET DEFAULT DATES IN FORMS
+// ─────────────────────────────────────────────
+function setDefaultDates() {
+  const today = todayStr();
+  ['sale-date','expense-date','due-tx-date','pay-tx-date'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = today;
+  });
+  // filter date default (clear so all show)
+  const fd = document.getElementById('filter-daily-date');
+  if (fd) fd.value = '';
+}
+
+// ═══════════════════════════════════════════
+//  FIRESTORE: REAL-TIME LISTENERS (Dashboard)
+// ═══════════════════════════════════════════
+
+/** Subscribe to customers collection for dashboard KPIs */
+function subscribeCustomers() {
+  unsubCustomers = customersCol.onSnapshot(snap => {
+    setFirebaseStatus(true);
+    allCustomers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Total due KPI
+    const totalDue = allCustomers.reduce((s, c) => s + (parseFloat(c.currentDue) || 0), 0);
+    document.getElementById('kpi-total-due').textContent = fmt(totalDue);
+
+    // Update collection rate
+    updateCollectionRate(totalDue);
+
+    // Re-render customer list (if on that page)
+    renderCustomerList();
+    updateCustomerCountLabel();
+  }, err => {
+    console.error('Customers listener error:', err);
+    setFirebaseStatus(false);
+    toast('Firebase connection error. Check your config.', 'error');
+  });
+}
+
+/** Subscribe to transactions for last-30-days collected baki */
+function subscribeTransactions() {
+  unsubTransactions = transactionsCol.onSnapshot(snap => {
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Last 30 days collected = payments created in the last 30 days
+    const collected30 = docs
+      .filter(t => t.type === 'payment' && isWithinLastDays(t.date, 30))
+      .reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+    document.getElementById('kpi-today-collected').textContent = fmt(collected30);
+
+    // Update collection rate progress
+    const totalDueEl = document.getElementById('kpi-total-due').textContent;
+    const totalDue = parseFloat(totalDueEl.replace('$','').replace(/,/g,'')) || 0;
+    updateCollectionRate(totalDue, collected30);
+  }, err => {
+    console.error('Transactions listener error:', err);
+  });
+}
+
+/** Subscribe to daily_records for last-30-days KPIs + weekly chart + full history */
+function subscribeDailyRecords() {
+  unsubDaily = dailyRecordsCol.orderBy('date', 'desc').onSnapshot(snap => {
+    allDaily = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const sales30    = allDaily.filter(r => r.type === 'sale'    && isWithinLastDays(r.date, 30)).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+    const expenses30 = allDaily.filter(r => r.type === 'expense' && isWithinLastDays(r.date, 30)).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+    document.getElementById('kpi-today-sales').textContent    = fmt(sales30);
+    document.getElementById('kpi-today-expenses').textContent = fmt(expenses30);
+
+    // Weekly chart
+    renderWeeklyChart();
+
+    // Render daily list (if on that page)
+    filterDailyByDate();
+    updateDailySummary();
+
+    // Render full all-time history (All History page)
+    renderHistoryDailyList();
+  }, err => {
+    console.error('Daily records listener error:', err);
+  });
+}
+
+function updateCollectionRate(totalDue, todayCollected) {
+  // Get current collected from DOM if not provided
+  if (todayCollected === undefined) {
+    const el = document.getElementById('kpi-today-collected').textContent;
+    todayCollected = parseFloat(el.replace('$','').replace(/,/g,'')) || 0;
+  }
+  const pct = totalDue > 0 ? Math.min(100, (todayCollected / totalDue) * 100) : 0;
+  document.getElementById('collection-rate-pct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('collection-progress-fill').style.width = pct + '%';
+  document.getElementById('cr-collected').textContent = 'Collected: ' + fmt(todayCollected);
+  document.getElementById('cr-total').textContent = 'Total Due: ' + fmt(totalDue);
+}
+
+// ═══════════════════════════════════════════
+//  CHART.JS — WEEKLY CHART
+// ═══════════════════════════════════════════
+function renderWeeklyChart() {
+  // Build last-7-days labels
+  const days = [];
+  const salesMap = {}, expMap = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const str = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const label = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    days.push({ str, label });
+    salesMap[str] = 0; expMap[str] = 0;
+  }
+
+  allDaily.forEach(r => {
+    if (salesMap[r.date] !== undefined) {
+      if (r.type === 'sale')    salesMap[r.date] += parseFloat(r.amount) || 0;
+      if (r.type === 'expense') expMap[r.date]   += parseFloat(r.amount) || 0;
+    }
+  });
+
+  const labels    = days.map(d => d.label);
+  const salesData = days.map(d => salesMap[d.str]);
+  const expData   = days.map(d => expMap[d.str]);
+
+  const ctx = document.getElementById('weeklyChart').getContext('2d');
+  if (weeklyChart) weeklyChart.destroy();
+
+  weeklyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Sales',
+          data: salesData,
+          backgroundColor: 'rgba(59,130,246,0.7)',
+          borderRadius: 6,
+          borderSkipped: false,
+        },
+        {
+          label: 'Expenses',
+          data: expData,
+          backgroundColor: 'rgba(244,63,94,0.65)',
+          borderRadius: 6,
+          borderSkipped: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#78716C' } },
+        y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: {
+            font: { size: 11 }, color: '#78716C',
+            callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(1) + 'k' : v)
+          }
+        }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
+//  CUSTOMER LEDGER
+// ═══════════════════════════════════════════
+
+/** Add a new customer */
+async function addCustomer() {
+  const name  = document.getElementById('new-cust-name').value.trim();
+  const phone = document.getElementById('new-cust-phone').value.trim();
+  const due   = parseFloat(document.getElementById('new-cust-due').value) || 0;
+
+  if (!name) { toast('Customer name is required.', 'error'); return; }
+
+  setBtnLoading('btn-add-customer', true);
+  try {
+    // 1. Create customer document
+    const custRef = await customersCol.add({
+      name,
+      phone: phone || '',
+      currentDue: due,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2. If there's an initial due, log it as a transaction
+    if (due > 0) {
+      await transactionsCol.add({
+        customerId:  custRef.id,
+        date:        todayStr(),
+        type:        'add_due',
+        amount:      due,
+        description: 'Initial balance',
+        createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // Clear form
+    ['new-cust-name','new-cust-phone','new-cust-due'].forEach(id => document.getElementById(id).value = '');
+    toast(`${name} added successfully!`);
+  } catch (err) {
+    console.error(err);
+    toast('Error adding customer: ' + err.message, 'error');
+  } finally {
+    setBtnLoading('btn-add-customer', false, '<i class="fas fa-plus mr-2"></i>Add Customer');
+  }
+}
+
+/** Render the customer list from allCustomers */
+function renderCustomerList() {
+  const query = document.getElementById('search-customers')?.value?.toLowerCase() || '';
+  const filtered = allCustomers.filter(c =>
+    c.name.toLowerCase().includes(query) ||
+    (c.phone || '').toLowerCase().includes(query)
+  );
+
+  const container = document.getElementById('customer-list');
+  const emptyEl   = document.getElementById('customer-empty');
+
+  if (filtered.length === 0) {
+    container.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  container.innerHTML = filtered.map(c => {
+    const due = parseFloat(c.currentDue) || 0;
+    const dueColor = due > 0 ? 'text-amber-600' : 'text-emerald-600';
+    const dueBg    = due > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    return `
+      <div class="ledger-row py-3 px-1 flex items-center gap-3 cursor-pointer" onclick='openCustomerModal(${JSON.stringify(c)})'>
+        <div class="w-9 h-9 bg-gradient-to-br from-slate-600 to-slate-800 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+          ${initials(c.name)}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-stone-800 text-sm truncate">${c.name}</div>
+          <div class="text-xs text-stone-400">${c.phone || 'No phone'}</div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="text-sm font-bold ${dueColor} amount-num">${fmt(due)}</div>
+          <div class="text-xs ${dueBg} px-2 py-0.5 rounded-full mt-0.5 inline-block">${due > 0 ? 'Due' : 'Clear'}</div>
+        </div>
+        <i class="fas fa-chevron-right text-stone-300 text-xs flex-shrink-0"></i>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterCustomers() {
+  renderCustomerList();
+  updateCustomerCountLabel();
+}
+
+function updateCustomerCountLabel() {
+  const query = document.getElementById('search-customers')?.value?.toLowerCase() || '';
+  const cnt = allCustomers.filter(c =>
+    c.name.toLowerCase().includes(query) || (c.phone||'').toLowerCase().includes(query)
+  ).length;
+  document.getElementById('customer-count-label').textContent = `${cnt} customer${cnt !== 1 ? 's' : ''}`;
+}
+
+/** Generate & download a PDF listing every customer's name, phone & current due */
+function downloadCustomerListPDF() {
+  if (!allCustomers.length) {
+    toast('No customers to export yet.', 'error');
+    return;
+  }
+  if (typeof window.jspdf === 'undefined') {
+    toast('PDF library failed to load. Check your internet connection.', 'error');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  const sorted = [...allCustomers].sort((a, b) => a.name.localeCompare(b.name));
+  const totalDue = sorted.reduce((s, c) => s + (parseFloat(c.currentDue) || 0), 0);
+
+  doc.setFontSize(13);
+  doc.setFont(undefined, 'bold');
+  doc.text('Ma Genarel Store — Customer Due List', 14, 15);
+  doc.setFontSize(8);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })}`, 14, 20);
+
+  // Two-customer-per-row layout (name + due only, no phone) so more rows fit per page
+  const half = Math.ceil(sorted.length / 2);
+  const leftHalf  = sorted.slice(0, half);
+  const rightHalf = sorted.slice(half);
+
+  const rows = [];
+  for (let i = 0; i < half; i++) {
+    const l = leftHalf[i];
+    const r = rightHalf[i];
+    rows.push([
+      i + 1,
+      l.name,
+      '$ ' + (parseFloat(l.currentDue) || 0).toLocaleString('en-IN'),
+      r ? (half + i + 1) : '',
+      r ? r.name : '',
+      r ? '$ ' + (parseFloat(r.currentDue) || 0).toLocaleString('en-IN') : ''
+    ]);
+  }
+
+  doc.autoTable({
+    startY: 25,
+    head: [['#', 'Name', 'Due', '#', 'Name', 'Due']],
+    body: rows,
+    theme: 'striped',
+    headStyles: { fillColor: [16, 185, 129], fontSize: 8 },
+    styles: { fontSize: 8, cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 8 },  2: { halign: 'right' },
+      3: { cellWidth: 8 },  5: { halign: 'right' }
+    },
+    didDrawPage: function () {
+      const pageHeight = doc.internal.pageSize.getHeight();
+      doc.setFontSize(7);
+      doc.setFont(undefined, 'italic');
+      doc.setTextColor(120, 113, 108);
+      doc.text('This app created by admin (Heart Coding)', pageWidth / 2, pageHeight - 8, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+    }
+  });
+
+  const finalY = doc.lastAutoTable.finalY || 25;
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'bold');
+  doc.text(`Total Outstanding Due: $ ${totalDue.toLocaleString('en-IN')}`, 14, finalY + 8);
+
+  doc.save(`customer-due-list-${todayStr()}.pdf`);
+  toast('Customer list PDF downloaded!');
+}
+
+// ═══════════════════════════════════════════
+//  CUSTOMER MODAL
+// ═══════════════════════════════════════════
+
+function openCustomerModal(customer) {
+  currentCustomer = customer;
+  document.getElementById('modal-avatar').textContent = initials(customer.name);
+  document.getElementById('modal-cust-name').textContent = customer.name;
+  document.getElementById('modal-cust-phone').textContent = customer.phone || 'No phone number';
+  document.getElementById('modal-cust-due').textContent = fmt(customer.currentDue);
+
+  // Populate edit fields
+  document.getElementById('edit-cust-name').value = customer.name;
+  document.getElementById('edit-cust-phone').value = customer.phone || '';
+
+  // Set default dates
+  ['due-tx-date','pay-tx-date'].forEach(id => document.getElementById(id).value = todayStr());
+  ['due-tx-amount','pay-tx-amount','due-tx-desc','pay-tx-desc'].forEach(id => document.getElementById(id).value = '');
+
+  switchModalTab('history');
+  loadTransactionHistory(customer.id);
+
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  currentCustomer = null;
+}
+
+function closeModalOnOverlay(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+function switchModalTab(tab) {
+  ['history','add-due','payment','edit'].forEach(t => {
+    document.getElementById(`modal-tab-${t}`).classList.add('hidden');
+    document.getElementById(`tab-btn-${t}`).classList.remove('active');
+  });
+  document.getElementById(`modal-tab-${tab}`).classList.remove('hidden');
+  document.getElementById(`tab-btn-${tab}`).classList.add('active');
+}
+
+/** Load and render transaction history for a customer */
+async function loadTransactionHistory(customerId) {
+  const listEl  = document.getElementById('modal-tx-list');
+  const emptyEl = document.getElementById('modal-tx-empty');
+  listEl.innerHTML = `
+    <div class="text-center py-8 text-stone-400 text-sm">
+      <div class="spinner mx-auto mb-2" style="border-color:#D1D5DB;border-top-color:#10B981;"></div>
+      Loading…
+    </div>`;
+  emptyEl.classList.add('hidden');
+
+  try {
+    const snap = await transactionsCol
+      .where('customerId', '==', customerId)
+      .get();
+
+    if (snap.empty) {
+      listEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    docs.sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return bt - at;
+    });
+
+    currentCustomerTxList = docs; // keep for edit/delete lookups
+
+    listEl.innerHTML = docs.map(tx => renderTxRow(tx)).join('');
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = `<div class="text-center py-4 text-rose-500 text-sm"><i class="fas fa-exclamation-circle mr-1"></i> Error loading. Check Firestore indexes.</div>`;
+    toast('Error loading transactions. You may need to create a Firestore composite index.', 'error');
+  }
+}
+
+/** Render a single transaction row (view mode) with Edit/Delete icons */
+function renderTxRow(tx) {
+  const isPayment  = tx.type === 'payment';
+  const badgeClass = isPayment ? 'badge-payment' : 'badge-due';
+  const badgeText  = isPayment ? 'Payment' : 'Due Added';
+  const amtColor   = isPayment ? 'text-emerald-600' : 'text-amber-600';
+  const amtPrefix  = isPayment ? '−' : '+';
+  const icon       = isPayment ? 'fa-arrow-down text-emerald-500' : 'fa-arrow-up text-amber-500';
+  return `
+    <div class="ledger-row py-3 px-1 flex items-center gap-3" id="tx-row-${tx.id}">
+      <div class="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">
+        <i class="fas ${icon} text-sm"></i>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-stone-700">${tx.description || badgeText}</div>
+        <div class="text-xs text-stone-400">${tx.date}</div>
+      </div>
+      <div class="text-right flex-shrink-0">
+        <div class="font-bold text-sm ${amtColor} amount-num">${amtPrefix}${fmt(tx.amount)}</div>
+        <span class="badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0 ml-1">
+        <button onclick="editTxRow('${tx.id}')" title="Edit this entry" class="w-7 h-7 rounded-lg bg-stone-100 hover:bg-emerald-50 text-stone-500 hover:text-emerald-600 flex items-center justify-center transition-colors">
+          <i class="fas fa-pen text-xs"></i>
+        </button>
+        <button onclick="deleteTxRow('${tx.id}')" title="Delete this entry" class="w-7 h-7 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-500 hover:text-rose-600 flex items-center justify-center transition-colors">
+          <i class="fas fa-trash-alt text-xs"></i>
+        </button>
+      </div>
+    </div>`;
+}
+
+/** Switch a transaction row into an inline edit form (date + amount + description) */
+function editTxRow(txId) {
+  const tx = currentCustomerTxList.find(t => t.id === txId);
+  if (!tx) return;
+  const row = document.getElementById(`tx-row-${txId}`);
+  if (!row) return;
+  const isPayment = tx.type === 'payment';
+
+  row.outerHTML = `
+    <div class="ledger-row py-3 px-1" id="tx-row-${txId}">
+      <div class="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-2">
+        <div class="text-xs font-semibold ${isPayment ? 'text-emerald-600' : 'text-amber-600'} mb-1">
+          <i class="fas fa-pen mr-1"></i>Editing ${isPayment ? 'Payment' : 'Due Added'} entry
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Date</label>
+            <input class="form-input" style="padding:6px 10px;font-size:13px;" id="tx-edit-date-${txId}" type="date" value="${tx.date}" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 mb-1 block">Amount ($)</label>
+            <input class="form-input" style="padding:6px 10px;font-size:13px;" id="tx-edit-amount-${txId}" type="number" min="0" value="${tx.amount}" />
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-stone-600 mb-1 block">Description</label>
+          <input class="form-input" style="padding:6px 10px;font-size:13px;" id="tx-edit-desc-${txId}" type="text" value="${(tx.description || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button onclick="saveTxEdit('${txId}')" class="btn-primary flex-1" style="padding:7px 12px;font-size:13px;">
+            <i class="fas fa-check mr-1"></i>Save
+          </button>
+          <button onclick="loadTransactionHistory(currentCustomer.id)" class="flex-1 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-100 font-semibold transition-colors" style="padding:7px 12px;font-size:13px;">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+/** Save an edited transaction: updates the tx doc and adjusts the customer's currentDue by the delta */
+async function saveTxEdit(txId) {
+  const tx = currentCustomerTxList.find(t => t.id === txId);
+  if (!tx || !currentCustomer) return;
+
+  const newDate   = document.getElementById(`tx-edit-date-${txId}`).value;
+  const newAmount = parseFloat(document.getElementById(`tx-edit-amount-${txId}`).value);
+  const newDesc   = document.getElementById(`tx-edit-desc-${txId}`).value.trim();
+
+  if (!newDate)   { toast('Please select a date.', 'error'); return; }
+  if (!newAmount || newAmount <= 0) { toast('Enter a valid amount.', 'error'); return; }
+
+  const oldAmount = parseFloat(tx.amount) || 0;
+  const isPayment = tx.type === 'payment';
+  // add_due increases due, payment decreases due — so the due-adjustment sign flips for payments
+  const dueDelta  = isPayment ? -(newAmount - oldAmount) : (newAmount - oldAmount);
+
+  try {
+    const batch = db.batch();
+    batch.update(transactionsCol.doc(txId), {
+      date: newDate,
+      amount: newAmount,
+      description: newDesc || (isPayment ? 'Cash payment' : 'Credit purchase')
+    });
+    batch.update(customersCol.doc(currentCustomer.id), {
+      currentDue: firebase.firestore.FieldValue.increment(dueDelta)
+    });
+    await batch.commit();
+
+    const newDue = (parseFloat(currentCustomer.currentDue) || 0) + dueDelta;
+    currentCustomer = { ...currentCustomer, currentDue: newDue };
+    document.getElementById('modal-cust-due').textContent = fmt(newDue);
+
+    toast('Entry updated successfully!');
+    loadTransactionHistory(currentCustomer.id);
+    allTransactionsLoaded = false;
+  } catch (err) {
+    console.error(err);
+    toast('Error updating entry: ' + err.message, 'error');
+  }
+}
+
+/** Delete a transaction entirely and reverse its effect on the customer's currentDue */
+async function deleteTxRow(txId) {
+  const tx = currentCustomerTxList.find(t => t.id === txId);
+  if (!tx || !currentCustomer) return;
+
+  if (!confirm(`Delete this ${tx.type === 'payment' ? 'payment' : 'due'} entry of $${tx.amount}? This cannot be undone.`)) return;
+
+  const isPayment = tx.type === 'payment';
+  // Reverse the original effect: deleting an add_due should decrease due, deleting a payment should increase due back
+  const dueDelta = isPayment ? parseFloat(tx.amount) : -parseFloat(tx.amount);
+
+  try {
+    const batch = db.batch();
+    batch.delete(transactionsCol.doc(txId));
+    batch.update(customersCol.doc(currentCustomer.id), {
+      currentDue: firebase.firestore.FieldValue.increment(dueDelta)
+    });
+    await batch.commit();
+
+    const newDue = Math.max(0, (parseFloat(currentCustomer.currentDue) || 0) + dueDelta);
+    currentCustomer = { ...currentCustomer, currentDue: newDue };
+    document.getElementById('modal-cust-due').textContent = fmt(newDue);
+
+    toast('Entry deleted.');
+    loadTransactionHistory(currentCustomer.id);
+    allTransactionsLoaded = false;
+  } catch (err) {
+    console.error(err);
+    toast('Error deleting entry: ' + err.message, 'error');
+  }
+}
+
+/** Add due (increase baki) */
+async function addDueTransaction() {
+  if (!currentCustomer) return;
+  const date   = document.getElementById('due-tx-date').value;
+  const amount = parseFloat(document.getElementById('due-tx-amount').value);
+  const desc   = document.getElementById('due-tx-desc').value.trim();
+
+  if (!date)   { toast('Please select a date.', 'error'); return; }
+  if (!amount || amount <= 0) { toast('Enter a valid amount.', 'error'); return; }
+
+  setBtnLoading('btn-add-due', true);
+  try {
+    const batch = db.batch();
+
+    // 1. Add transaction
+    const txRef = transactionsCol.doc();
+    batch.set(txRef, {
+      customerId:  currentCustomer.id,
+      date,
+      type:        'add_due',
+      amount,
+      description: desc || 'Credit purchase',
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2. Update customer's currentDue
+    const custRef = customersCol.doc(currentCustomer.id);
+    batch.update(custRef, {
+      currentDue: firebase.firestore.FieldValue.increment(amount)
+    });
+
+    await batch.commit();
+
+    // Update local modal display
+    const newDue = (parseFloat(currentCustomer.currentDue) || 0) + amount;
+    currentCustomer = { ...currentCustomer, currentDue: newDue };
+    document.getElementById('modal-cust-due').textContent = fmt(newDue);
+
+    document.getElementById('due-tx-amount').value = '';
+    document.getElementById('due-tx-desc').value = '';
+    toast(`$${amount} added to due for ${currentCustomer.name}`);
+    loadTransactionHistory(currentCustomer.id);
+    allTransactionsLoaded = false;
+    switchModalTab('history');
+  } catch (err) {
+    console.error(err);
+    toast('Error adding due: ' + err.message, 'error');
+  } finally {
+    setBtnLoading('btn-add-due', false, '<i class="fas fa-plus mr-2"></i>Add to Due (Baki)');
+  }
+}
+
+/** Receive payment (decrease baki) */
+async function addPaymentTransaction() {
+  if (!currentCustomer) return;
+  const date   = document.getElementById('pay-tx-date').value;
+  const amount = parseFloat(document.getElementById('pay-tx-amount').value);
+  const desc   = document.getElementById('pay-tx-desc').value.trim();
+
+  if (!date)   { toast('Please select a date.', 'error'); return; }
+  if (!amount || amount <= 0) { toast('Enter a valid amount.', 'error'); return; }
+
+  const currentDue = parseFloat(currentCustomer.currentDue) || 0;
+  if (amount > currentDue + 0.01) {
+    toast(`Payment (${fmt(amount)}) exceeds current due (${fmt(currentDue)}).`, 'error');
+    return;
+  }
+
+  setBtnLoading('btn-add-payment', true);
+  try {
+    const batch = db.batch();
+
+    const txRef = transactionsCol.doc();
+    batch.set(txRef, {
+      customerId:  currentCustomer.id,
+      date,
+      type:        'payment',
+      amount,
+      description: desc || 'Cash payment',
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    const custRef = customersCol.doc(currentCustomer.id);
+    batch.update(custRef, {
+      currentDue: firebase.firestore.FieldValue.increment(-amount)
+    });
+
+    await batch.commit();
+
+    const newDue = Math.max(0, currentDue - amount);
+    currentCustomer = { ...currentCustomer, currentDue: newDue };
+    document.getElementById('modal-cust-due').textContent = fmt(newDue);
+
+    document.getElementById('pay-tx-amount').value = '';
+    document.getElementById('pay-tx-desc').value = '';
+    toast(`Payment of ${fmt(amount)} recorded for ${currentCustomer.name}`);
+    loadTransactionHistory(currentCustomer.id);
+    allTransactionsLoaded = false;
+    switchModalTab('history');
+  } catch (err) {
+    console.error(err);
+    toast('Error recording payment: ' + err.message, 'error');
+  } finally {
+    setBtnLoading('btn-add-payment', false, '<i class="fas fa-check mr-2"></i>Record Payment');
+  }
+}
+
+/** Update customer name and phone details */
+async function updateCustomerDetails() {
+  if (!currentCustomer) return;
+  const newName = document.getElementById('edit-cust-name').value.trim();
+  const newPhone = document.getElementById('edit-cust-phone').value.trim();
+
+  if (!newName) {
+    toast('Customer name is required.', 'error');
+    return;
+  }
+
+  setBtnLoading('btn-edit-customer', true);
+  try {
+    if (currentCustomer.id.startsWith('demo')) {
+      // Demo Mode
+      const idx = allCustomers.findIndex(c => c.id === currentCustomer.id);
+      if (idx !== -1) {
+        allCustomers[idx].name = newName;
+        allCustomers[idx].phone = newPhone;
+      }
+      currentCustomer.name = newName;
+      currentCustomer.phone = newPhone;
+    } else {
+      // Live Firestore Mode
+      await customersCol.doc(currentCustomer.id).update({
+        name: newName,
+        phone: newPhone
+      });
+      currentCustomer.name = newName;
+      currentCustomer.phone = newPhone;
+    }
+
+    // Update modal UI elements
+    document.getElementById('modal-avatar').textContent = initials(newName);
+    document.getElementById('modal-cust-name').textContent = newName;
+    document.getElementById('modal-cust-phone').textContent = newPhone || 'No phone number';
+
+    toast('Customer information updated successfully!');
+    
+    // Refresh parent customer layouts
+    renderCustomerList();
+    updateCustomerCountLabel();
+    
+    // Switch view back to history tab
+    switchModalTab('history');
+  } catch (err) {
+    console.error(err);
+    toast('Error updating customer: ' + err.message, 'error');
+  } finally {
+    setBtnLoading('btn-edit-customer', false, '<i class="fas fa-save mr-2"></i>Save Changes');
+  }
+}
+
+/** Delete customer and all their transactions */
+async function deleteCustomer() {
+  if (!currentCustomer) return;
+  if (!confirm(`Delete "${currentCustomer.name}" and ALL their transaction history? This cannot be undone.`)) return;
+
+  try {
+    // Delete all transactions for this customer
+    const txSnap = await transactionsCol.where('customerId', '==', currentCustomer.id).get();
+    const batch = db.batch();
+    txSnap.docs.forEach(doc => batch.delete(doc.ref));
+    batch.delete(customersCol.doc(currentCustomer.id));
+    await batch.commit();
+
+    toast(`${currentCustomer.name} deleted.`, 'info');
+    closeModal();
+  } catch (err) {
+    console.error(err);
+    toast('Error deleting customer: ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  DAILY ACCOUNTS
+// ═══════════════════════════════════════════
+
+async function addDailySale() {
+  const date   = document.getElementById('sale-date').value;
+  const amount = parseFloat(document.getElementById('sale-amount').value);
+  const note   = document.getElementById('sale-note').value.trim();
+
+  if (!date)   { toast('Please select a date.', 'error'); return; }
+  if (!amount || amount <= 0) { toast('Enter a valid amount.', 'error'); return; }
+
+  setBtnLoading('btn-add-sale', true);
+  try {
+    await dailyRecordsCol.add({
+      date,
+      type:      'sale',
+      amount,
+      reason:    note || 'Daily sale',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById('sale-amount').value = '';
+    document.getElementById('sale-note').value = '';
+    toast('Sale logged successfully!');
+  } catch (err) {
+    console.error(err);
+    toast('Error logging sale: ' + err.message, 'error');
+  } finally {
+    setBtnLoading('btn-add-sale', false, '<i class="fas fa-plus mr-2"></i>Log Sale');
+  }
+}
+
+async function addDailyExpense() {
+  const date   = document.getElementById('expense-date').value;
+  const amount = parseFloat(document.getElementById('expense-amount').value);
+  const reason = document.getElementById('expense-reason').value.trim();
+
+  if (!date)   { toast('Please select a date.', 'error'); return; }
+  if (!amount || amount <= 0) { toast('Enter a valid amount.', 'error'); return; }
+  if (!reason) { toast('Please enter a purpose/reason.', 'error'); return; }
+
+  setBtnLoading('btn-add-expense', true);
+  try {
+    await dailyRecordsCol.add({
+      date,
+      type:      'expense',
+      amount,
+      reason,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById('expense-amount').value = '';
+    document.getElementById('expense-reason').value = '';
+    toast('Expense recorded!');
+  } catch (err) {
+    console.error(err);
+    toast('Error recording expense: ' + err.message, 'error');
+  } finally {
+    setBtnLoading('btn-add-expense', false, '<i class="fas fa-minus mr-2"></i>Log Expense');
+  }
+}
+
+/** Render daily records list (filtered by date if selected) */
+function filterDailyByDate() {
+  const filterDate = document.getElementById('filter-daily-date')?.value || '';
+  const filtered = filterDate
+    ? allDaily.filter(r => r.date === filterDate)
+    : allDaily;
+
+  const listEl  = document.getElementById('daily-list');
+  const emptyEl = document.getElementById('daily-empty');
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    updateDailySummary(filtered);
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  listEl.innerHTML = filtered.map(r => {
+    const isSale = r.type === 'sale';
+    const icon     = isSale ? 'fa-shopping-cart text-blue-500' : 'fa-receipt text-rose-500';
+    const badge    = isSale ? 'badge-sale' : 'badge-expense';
+    const badgeTxt = isSale ? 'Sale' : 'Expense';
+    const amtColor = isSale ? 'text-blue-600' : 'text-rose-600';
+    const amtSign  = isSale ? '+' : '−';
+    return `
+      <div class="ledger-row py-3 px-1 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg ${isSale ? 'bg-blue-50' : 'bg-rose-50'} flex items-center justify-center flex-shrink-0">
+          <i class="fas ${icon} text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-stone-700 truncate">${r.reason || badgeTxt}</div>
+          <div class="text-xs text-stone-400">${r.date}</div>
+        </div>
+        <div class="text-right flex-shrink-0 flex items-center gap-2">
+          <div class="font-bold text-sm ${amtColor} amount-num">${amtSign}${fmt(r.amount)}</div>
+          <span class="badge ${badge}">${badgeTxt}</span>
+          <button onclick="deleteDailyRecord('${r.id}')" class="text-stone-300 hover:text-rose-400 transition-colors ml-1" title="Delete">
+            <i class="fas fa-times-circle text-sm"></i>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  updateDailySummary(filtered);
+}
+
+function updateDailySummary(data) {
+  const src = data !== undefined ? data : allDaily;
+  const filterDate = document.getElementById('filter-daily-date')?.value || '';
+  const list = filterDate ? allDaily.filter(r => r.date === filterDate) : src;
+
+  const totalSales = list.filter(r => r.type === 'sale')   .reduce((s,r) => s + (parseFloat(r.amount)||0), 0);
+  const totalExp   = list.filter(r => r.type === 'expense').reduce((s,r) => s + (parseFloat(r.amount)||0), 0);
+  const net        = totalSales - totalExp;
+
+  document.getElementById('sum-sales').textContent    = fmt(totalSales);
+  document.getElementById('sum-expenses').textContent = fmt(totalExp);
+  const netEl = document.getElementById('sum-net');
+  netEl.textContent = fmt(Math.abs(net));
+  netEl.className = `font-bold amount-num ${net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`;
+}
+
+async function deleteDailyRecord(id) {
+  if (!confirm('Delete this record?')) return;
+  try {
+    await dailyRecordsCol.doc(id).delete();
+    toast('Record deleted.', 'info');
+  } catch (err) {
+    toast('Error: ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  ALL HISTORY PAGE
+// ═══════════════════════════════════════════
+let allTransactionsCache = [];
+let allTransactionsLoaded = false;
+
+function switchHistoryTab(tab) {
+  ['daily', 'customer'].forEach(t => {
+    document.getElementById(`hist-tab-${t}`).classList.add('hidden');
+    document.getElementById(`hist-tab-btn-${t}`).classList.remove('active');
+  });
+  document.getElementById(`hist-tab-${tab}`).classList.remove('hidden');
+  document.getElementById(`hist-tab-btn-${tab}`).classList.add('active');
+
+  if (tab === 'customer' && !allTransactionsLoaded) {
+    loadAllTransactionsHistory();
+  }
+}
+
+/** Render the FULL (unfiltered, all-time) daily sales/expenses list */
+function renderHistoryDailyList() {
+  const listEl  = document.getElementById('history-daily-list');
+  const emptyEl = document.getElementById('history-daily-empty');
+  if (!listEl) return; // page not yet in DOM on first load - safe guard
+
+  if (allDaily.length === 0) {
+    listEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  listEl.innerHTML = allDaily.map(r => {
+    const isSale   = r.type === 'sale';
+    const icon     = isSale ? 'fa-shopping-cart text-blue-500' : 'fa-receipt text-rose-500';
+    const badge    = isSale ? 'badge-sale' : 'badge-expense';
+    const badgeTxt = isSale ? 'Sale' : 'Expense';
+    const amtColor = isSale ? 'text-blue-600' : 'text-rose-600';
+    const amtSign  = isSale ? '+' : '−';
+    return `
+      <div class="ledger-row py-3 px-1 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg ${isSale ? 'bg-blue-50' : 'bg-rose-50'} flex items-center justify-center flex-shrink-0">
+          <i class="fas ${icon} text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-stone-700 truncate">${r.reason || badgeTxt}</div>
+          <div class="text-xs text-stone-400">${r.date}</div>
+        </div>
+        <div class="text-right flex-shrink-0 flex items-center gap-2">
+          <div class="font-bold text-sm ${amtColor} amount-num">${amtSign}${fmt(r.amount)}</div>
+          <span class="badge ${badge}">${badgeTxt}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/** Load EVERY customer transaction (across all customers) for the All History page */
+async function loadAllTransactionsHistory() {
+  const listEl  = document.getElementById('history-customer-list');
+  const emptyEl = document.getElementById('history-customer-empty');
+  listEl.innerHTML = `
+    <div class="text-center py-8 text-stone-400 text-sm">
+      <div class="spinner mx-auto mb-2" style="border-color:#D1D5DB;border-top-color:#10B981;"></div>
+      Loading…
+    </div>`;
+  emptyEl.classList.add('hidden');
+
+  try {
+    const snap = await transactionsCol.get();
+    allTransactionsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    allTransactionsLoaded = true;
+    renderAllTransactionsHistory();
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = `<div class="text-center py-4 text-rose-500 text-sm"><i class="fas fa-exclamation-circle mr-1"></i> Error loading history.</div>`;
+  }
+}
+
+function renderAllTransactionsHistory() {
+  const listEl  = document.getElementById('history-customer-list');
+  const emptyEl = document.getElementById('history-customer-empty');
+
+  if (allTransactionsCache.length === 0) {
+    listEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  const custMap = {};
+  allCustomers.forEach(c => custMap[c.id] = c.name);
+
+  const sorted = [...allTransactionsCache].sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return bt - at;
+  });
+
+  listEl.innerHTML = sorted.map(tx => {
+    const isPayment  = tx.type === 'payment';
+    const badgeClass = isPayment ? 'badge-payment' : 'badge-due';
+    const badgeText  = isPayment ? 'Payment' : 'Due Added';
+    const amtColor   = isPayment ? 'text-emerald-600' : 'text-amber-600';
+    const amtPrefix  = isPayment ? '−' : '+';
+    const icon       = isPayment ? 'fa-arrow-down text-emerald-500' : 'fa-arrow-up text-amber-500';
+    const custName   = custMap[tx.customerId] || 'Unknown Customer';
+    return `
+      <div class="ledger-row py-3 px-1 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">
+          <i class="fas ${icon} text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-stone-700 truncate">${custName} — ${tx.description || badgeText}</div>
+          <div class="text-xs text-stone-400">${tx.date}</div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="font-bold text-sm ${amtColor} amount-num">${amtPrefix}${fmt(tx.amount)}</div>
+          <span class="badge ${badgeClass}">${badgeText}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+function init() {
+  initUserDatabase();
+  const loggedInUser = localStorage.getItem('baki_khata_logged_in_user');
+  
+  if (loggedInUser) {
+    showMainApp();
+  } else {
+    document.getElementById('auth-container').classList.remove('hidden');
+    document.getElementById('app-container').classList.add('hidden');
+  }
+}
+
+/** Launch the actual application after successful validation */
+function startApp() {
+  updateDateDisplay();
+  setDefaultDates();
+
+  // If already subscribed to listeners, don't re-subscribe
+  if (unsubCustomers || unsubTransactions || unsubDaily) return;
+
+  // Check Firebase config
+  if (firebaseConfig.apiKey === 'YOUR_API_KEY') {
+    setFirebaseStatus(false);
+    toast('⚠️ Please set your Firebase config in the JS section!', 'error');
+    // Show demo data for preview
+    loadDemoData();
+    return;
+  }
+
+  // Start real-time listeners
+  try {
+    subscribeCustomers();
+    subscribeTransactions();
+    subscribeDailyRecords();
+
+    // Ping Firestore to detect connectivity
+    db.collection('_ping').limit(1).get()
+      .then(() => setFirebaseStatus(true))
+      .catch(() => setFirebaseStatus(false));
+  } catch (err) {
+    console.error('Firebase init error:', err);
+    setFirebaseStatus(false);
+    toast('Firebase init failed: ' + err.message, 'error');
+  }
+}
+
+/** Demo data for preview when no Firebase is configured */
+function loadDemoData() {
+  allCustomers = [
+    { id:'demo1', name:'Rahim Uddin', phone:'01711000001', currentDue: 3500 },
+    { id:'demo2', name:'Karim Mia', phone:'01811000002', currentDue: 1200 },
+    { id:'demo3', name:'Sumaiya Begum', phone:'01911000003', currentDue: 0 },
+    { id:'demo4', name:'Jahangir Hossain', phone:'01611000004', currentDue: 8750 },
+  ];
+  allDaily = [
+    { id:'d1', date: todayStr(), type:'sale', amount:12500, reason:'Morning sales' },
+    { id:'d2', date: todayStr(), type:'sale', amount:8300, reason:'Evening sales' },
+    { id:'d3', date: todayStr(), type:'expense', amount:2400, reason:'Electricity bill' },
+    { id:'d4', date: todayStr(), type:'expense', amount:500, reason:'Packaging material' },
+  ];
+
+  const totalDue = allCustomers.reduce((s,c) => s + c.currentDue, 0);
+  document.getElementById('kpi-total-due').textContent = fmt(totalDue);
+  document.getElementById('kpi-today-collected').textContent = fmt(1500);
+  document.getElementById('kpi-today-sales').textContent = fmt(20800);
+  document.getElementById('kpi-today-expenses').textContent = fmt(2900);
+  updateCollectionRate(totalDue, 1500);
+  renderCustomerList();
+  updateCustomerCountLabel();
+  filterDailyByDate();
+  renderWeeklyChart();
+  renderHistoryDailyList();
+
+  toast('Demo mode: Add your Firebase config to connect real data.', 'info');
+}
+
+// ── Kick off on DOM ready ──
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
