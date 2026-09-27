@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ma Genarel Store — Grocery Ledger & Daily Accounts</title>
+<title>StorePro — Grocery Ledger & Daily Accounts</title>
 
 <!-- Tailwind CSS CDN -->
 <script src="https://cdn.tailwindcss.com"></script>
@@ -234,7 +234,7 @@
       <div class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg mb-3">
         <i class="fas fa-book-open text-white text-lg"></i>
       </div>
-      <h2 class="text-2xl font-bold text-stone-800">Ma Genarel Store</h2>
+      <h2 class="text-2xl font-bold text-stone-800">StorePro</h2>
       <p class="text-stone-400 text-sm">Created by admin</p>
     </div>
 
@@ -310,7 +310,7 @@
           <i class="fas fa-book-open text-white text-sm"></i>
         </div>
         <div>
-          <div class="text-white font-bold text-base leading-tight">Ma Genarel Store</div>
+          <div class="text-white font-bold text-base leading-tight">StorePro</div>
           <div class="text-slate-400 text-xs">Created by admin</div>
         </div>
       </div>
@@ -1484,7 +1484,7 @@ function downloadCustomerListPDF() {
 
   doc.setFontSize(13);
   doc.setFont(undefined, 'bold');
-  doc.text('Ma Genarel Store — Customer Due List', 14, 15);
+  doc.text('StorePro — Customer Due List', 14, 15);
   doc.setFontSize(8);
   doc.setFont(undefined, 'normal');
   doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })}`, 14, 20);
