@@ -1,4 +1,4 @@
-Ma General Store Management System
+StorePro Management System
 ==================================
 
 Firebase Setup Guide
